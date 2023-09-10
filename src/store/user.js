@@ -1,49 +1,37 @@
 import { createSlice } from '@reduxjs/toolkit' ;
+import { decodedToken, getRefreshToken, removeAccToken, removeRefToken } from '../utils/functions';
 
 let initialState = {
-    user: {
-        username: null,
+    details: decodedToken() || {
         id: null,
-        role: null
+        username: null,
+        role: 'STUDENT'
     },
-    accessToken: null,
-    refreshToken: null
-}
-try{
-    const temp = JSON.parse(localStorage.getItem('user')) ;
-    if (temp){
-        initialState = temp ;
-    }
-}catch(err){
-    console.log(err) ;
-    
-}
-console.log(initialState) ;
+    refreshToken: getRefreshToken() 
+} ;
 
 const userSlice = createSlice({
     name: 'user',
     initialState,
     reducers: {
         setUser: (state, action) => {
-            const { user, accessToken, refreshToken } = action.payload ;
-            state.user = user ;
-            state.accessToken = accessToken ;
+            const { details, refreshToken } = action.payload ;
+            state.details.id = details.id ;
+            state.details.username = details.username ;
+            state.details.role = details.role ;
             state.refreshToken = refreshToken ;
-            localStorage.setItem('user', JSON.stringify(state)) ;
         },
         logoutUser: (state, action) => {
-            state.accessToken = null ;
+            state.details.id = null ;
+            state.details.username = null ;
+            state.details.role = 'STUDENT' ;
             state.refreshToken = null ;
-            state.user = null ;
-            localStorage.setItem('user', null) ;
-        },
-        changeAccessToken: (state, action) => {
-            state.accessToken = action.payload ;
-            localStorage.setItem("user", JSON.stringify(state)) ;
+            removeAccToken() ;
+            removeRefToken() ;
         }
     }
 }) ;
 
-export const { setUser, logoutUser, changeAccessToken } = userSlice.actions ;
+export const { setUser, logoutUser } = userSlice.actions ;
 
 export default userSlice.reducer ;
