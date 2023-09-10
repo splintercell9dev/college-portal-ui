@@ -1,97 +1,96 @@
-import { useEffect, useState } from 'react' ;
-import { useDispatch, useSelector } from 'react-redux';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from "react";
 import Navbar from "../../shared/navbar";
-import server from '../../utils/axios';
-import { changeAccessToken } from '../../store/user' ;
-
+import axios from "axios";
+import { getAccessToken, getStudentDetails, refreshAccessToken } from "../../utils/functions";
+import { useDispatch } from "react-redux";
+import { logoutUser } from "../../store/user";
+import { useNavigate } from "react-router-dom";
+import Table from "./table";
 
 function Staff(){
-    const { user, accessToken, refreshToken} = useSelector(state => state.user) ;
     const dispatch = useDispatch() ;
-    const [students, setStudents] = useState([]) ;
-    const refreshAccessToken = async () => {
-        try{
-            const { data } = await server.post('refresh', {
-                refreshToken
-            }) ;
+    const navigate = useNavigate() ;
+    const [error, setError] = useState('') ;
+    const [show, setShow] = useState(false) ;
+    const [data, setData] = useState([]) ;
 
-            if (data.data.accessToken){
-                dispatch(changeAccessToken(data.data?.accessToken)) ;   
-            }
-
-        }catch (err){
-            console.log(err)
-        }
-    }
-
-    const view = () => {
-        server.get()
+    const logout = () => {
+        dispatch(logoutUser()) ;
+        navigate('/', { replace: true }) ;
     } ;
 
-    const download = () => {
-
+    const refAccToken = () => {
+        refreshAccessToken(axios.CancelToken.source()).catch(err => {
+            if (err.response?.data?.error.default === 'jwt expired'){
+                logout() ;
+            }
+        }) ;
     }
 
-    useEffect(() => {
-        if (user){
-            server.get('staff/students', {
-                headers: {
-                    Authorization: `Bearer ${accessToken}`
-                }
-            }).then(result => {
-                const u = result.data.data ;
-                if (u){
-                    console.log('update state')
-                    setStudents(u) ;
-                }
-            })
-            .catch((err) => {
-                console.error(err) ;
-                if (err.response?.data.error === 'jwt expired'){
-                    refreshAccessToken() ;
-                }
-            })
+    const fetchDetails = async () => {
+        setError(false) ;
+        const [data, error] = await getStudentDetails() ;
+        setShow(false) ;
+        if (error){
+            setError(error.message) ;
+            if (error.message === 'jwt expired'){
+                refAccToken() ;
+            }
         }
-    }, [user]);
+        else if (data){
+            setShow(true) ;
+            setData(data) ;
+            console.log(data) ;
+        }
+    } ;
+
+    useEffect(() => {
+        let source ;
+        if (!getAccessToken()){
+            source = axios.CancelToken.source() ;
+            refreshAccessToken(source).catch(err => {
+                console.error(err) ;
+                if (err.repsonse?.data?.error.default === 'jwt expired'){
+                    logout() ;
+                }
+            }) ;
+        }
+
+        let interval = setInterval(() => {
+            const innerS = axios.CancelToken.source() ;
+            console.log('Refreshing access token 10min.') ;
+            refreshAccessToken(innerS).catch(err => {
+                if (err.response?.data?.error.default === 'jwt expired'){
+                    console.error(err) ;
+                    logout() ;
+                }
+            }) ;
+        }, 10 * 60 * 1000) ;
+
+        return () => {
+            clearInterval(interval) ;
+            if (source){
+                source.cancel() ;
+            }
+        } ;
+    }, []) ;
+
     return (
-        <div className="w-100 h-100">
+        <div className="w-100 h-100 d-flex flex-column">
             <Navbar />
-            <div className="container p-3 w-100">
-                <table className='w-100'>
-                    <thead>
-                        <tr>
-                            <th scope='col'>#</th>
-                            <th scope='col'>Name</th>
-                            <th scope='col'>Email</th>
-                            <th scope='col'>Contact</th>
-                            <th scope='col'>Address</th>
-                            <th scope='col'>Date Uploaded</th>
-                            <th scope='col'>File</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+            {
+                !show ?
+                <div className="container d-flex justify-content-center align-items-center flex-grow-1 mt-3">
+                    <div className="d-flex flex-column text-danger">
                         {
-                            students.map((student, index) => (
-                                <tr key={index} style={{
-                                    fontSize: '12px'
-                                }}>
-                                    <th>{ index+1 }</th>
-                                    <th>{ student.name }</th>
-                                    <th>{ student.email }</th>
-                                    <th>{ student.contact }</th>
-                                    <th>{ student.address }</th>
-                                    <th>{ new Date(student.updatedAt).toDateString() }</th>
-                                    <th>
-                                        <button className='btn btn-primary me-2' onClick={view}>View</button>
-                                        <button className='btn btn-secondary'>Download</button>
-                                    </th>
-                                </tr>
-                            ))
+                            error && <p className="text-center">{error}</p>
                         }
-                    </tbody>
-                </table>
-            </div>
+                        <button className="btn btn-primary" onClick={fetchDetails}>Fetch Details</button>
+                    </div>
+                </div>            
+                :
+                <Table data={data} onRefresh={fetchDetails} onAccRef={refAccToken} />
+            }
         </div>
     )
 } ;
